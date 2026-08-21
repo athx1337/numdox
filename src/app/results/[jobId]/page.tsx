@@ -222,6 +222,8 @@ export default function ResultsPage() {
     (identity.namesDiscovered && identity.namesDiscovered.length > 0 ? identity.namesDiscovered[0].name : null) ||
     null
 
+  const isIdentityLoading = isLoading || (!result.identity && !confirmedPersonName)
+
   const displayName = resolvedPersonName
     ? resolvedPersonName
     : carrier.name
@@ -229,6 +231,10 @@ export default function ResultsPage() {
     : validation.countryName
     ? `${validation.countryName} Target`
     : 'Identified Target'
+
+  const nameParts = displayName.trim().split(/\s+/)
+  const firstName = nameParts[0] || 'Target'
+  const secondName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
 
   return (
     <main className="min-h-screen bg-background text-foreground pb-20">
@@ -291,20 +297,50 @@ export default function ResultsPage() {
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
                 lookup complete / subject profile
               </p>
-              <h1 className="mt-3 font-mono text-4xl font-black leading-[0.95] tracking-[-0.08em] sm:text-6xl md:text-7xl">
-                {displayName.split(' ')[0]}<br />
-                <span className="rgb-flow font-serif font-medium italic tracking-[-0.08em]">
-                  {displayName.split(' ').slice(1).join(' ') || 'Identity Matrix.'}
-                </span>
-              </h1>
+              {isIdentityLoading ? (
+                <div className="mt-3">
+                  <h1 className="font-mono text-3xl font-black leading-[1.05] tracking-[-0.08em] sm:text-5xl md:text-6xl flex flex-wrap items-center gap-3">
+                    <span className="rgb-flow">Resolving Identity</span>
+                    <span className="inline-flex items-center gap-1.5 py-1">
+                      <span className="size-2.5 bg-primary rounded-none animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="size-2.5 bg-primary rounded-none animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="size-2.5 bg-primary rounded-none animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  </h1>
+                  <p className="mt-2 text-xs font-mono text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin text-primary" />
+                    Querying RapidAPI Truecaller Pool, NPCI Banking KYC & Web Indices...
+                  </p>
+                </div>
+              ) : (
+                <h1 className="mt-3 font-mono text-4xl font-black leading-[0.95] tracking-[-0.08em] sm:text-6xl md:text-7xl">
+                  {firstName}
+                  {secondName ? (
+                    <>
+                      <br />
+                      <span className="rgb-flow font-serif font-medium italic tracking-[-0.08em] pr-2">
+                        {secondName}
+                      </span>
+                    </>
+                  ) : null}
+                </h1>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:pb-1">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="size-7 text-primary" />
-                <span className="border-2 border-foreground bg-primary px-3 py-2 font-mono text-[11px] font-bold uppercase text-primary-foreground shadow-[4px_4px_0_var(--foreground)]">
-                  {resolvedPersonName ? 'PERSON NAME RESOLVED' : 'CARRIER SIGNAL VERIFIED'}
-                </span>
+                {isIdentityLoading ? (
+                  <span className="border-2 border-foreground bg-secondary px-3 py-2 font-mono text-[11px] font-bold uppercase text-foreground shadow-[3px_3px_0_var(--foreground)] flex items-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin text-primary" />
+                    SEARCHING CALLER ID...
+                  </span>
+                ) : (
+                  <span className="border-2 border-foreground bg-primary px-3 py-2 font-mono text-[11px] font-bold uppercase text-primary-foreground shadow-[3px_3px_0_var(--foreground)] flex items-center gap-1.5">
+                    <CheckCircle className="size-3.5" />
+                    {resolvedPersonName ? 'PERSON NAME RESOLVED' : 'CARRIER SIGNAL VERIFIED'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -313,7 +349,18 @@ export default function ResultsPage() {
             <Meta label="E.164 Target" value={target} />
             <Meta label="Line Type" value={carrier.type ? carrier.type.toUpperCase() : validation.type || 'MOBILE'} />
             <Meta label="Telecom Circle" value={location.region || validation.countryName || 'India / National'} />
-            <Meta label="Identified Person" value={resolvedPersonName || 'Pending Banking/Truecaller Confirmation'} />
+            <Meta
+              label="Identified Person"
+              value={
+                isIdentityLoading ? (
+                  <span className="flex items-center gap-1 text-primary font-bold">
+                    <Loader2 className="size-3 animate-spin" /> Resolving...
+                  </span>
+                ) : (
+                  resolvedPersonName || 'Pending Banking/Truecaller Confirmation'
+                )
+              }
+            />
           </div>
         </div>
 
@@ -655,11 +702,11 @@ function Score({ title, score, caption, tone }: { title: string; score: string; 
   )
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function Meta({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between border-b border-border pb-2">
       <span className="text-muted-foreground font-mono text-xs">{label}</span>
-      <code className="font-mono text-xs font-bold text-foreground text-right">{value || 'N/A'}</code>
+      <div className="font-mono text-xs font-bold text-foreground text-right">{value || 'N/A'}</div>
     </div>
   )
 }
