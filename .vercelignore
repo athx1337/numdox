@@ -1,0 +1,5 @@
+# Ignore Python backend and worker from Vercel build
+backend/
+backend-worker/
+cli/
+redesign/
