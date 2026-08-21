@@ -168,8 +168,8 @@ export class IdentityFinderService {
         const html = await ddgRes.text()
         sources.push('Public Search Indices')
 
-        const snippetMatches = Array.from(html.matchAll(/<a[^>]+class="result__snippet[^>]*>(.*?)<\/a>/gs))
-        const titleMatches = Array.from(html.matchAll(/<h2[^>]*>\s*<a[^>]*>(.*?)<\/a>/gs))
+        const snippetMatches = Array.from(html.matchAll(/<a[^>]+class="result__snippet[^>]*>([\s\S]*?)<\/a>/g))
+        const titleMatches = Array.from(html.matchAll(/<h2[^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/g))
 
         const allText = [...snippetMatches, ...titleMatches]
           .map((m) => m[1].replace(/<[^>]+>/g, ''))

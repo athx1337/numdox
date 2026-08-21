@@ -46,9 +46,7 @@ export interface LookupProgress {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __phonetrace_jobProgress: Map<string, LookupProgress> | undefined
-  // eslint-disable-next-line no-var
   var __phonetrace_jobResults: Map<string, PhoneLookupResult> | undefined
 }
 

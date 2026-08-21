@@ -11,11 +11,18 @@ import {
   Clock,
   CheckCircle2,
 } from 'lucide-react'
-import { ModuleStatus, MODULE_DEFINITIONS } from '@/types/phone'
+export interface ModuleProgressItem {
+  name: string
+  label?: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  startedAt?: string
+  completedAt?: string
+  error?: string
+}
 
 interface ProgressTrackerProps {
   jobId: string
-  modules: ModuleStatus[]
+  modules: ModuleProgressItem[]
   status: 'pending' | 'processing' | 'completed' | 'failed'
   currentModule?: string
 }
@@ -135,7 +142,7 @@ export function CompactProgressTracker({
   modules,
   status,
 }: {
-  modules: ModuleStatus[]
+  modules: ModuleProgressItem[]
   status: 'pending' | 'processing' | 'completed' | 'failed'
 }) {
   const completedCount = modules.filter((m) => m.status === 'completed').length

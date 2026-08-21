@@ -5,7 +5,6 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { JobStatusSchema, ApiResponseSchema, PhoneLookupResultSchema } from '@/types/phone'
 import { PhoneOrchestrator } from '@/services'
 import { authenticateRequest } from '@/lib/auth'
 import { randomBytes } from 'crypto'

@@ -353,11 +353,11 @@ function SpamDetails({ spam }: { spam: SpamScore }) {
         </div>
         <div className="text-center p-3 rounded-lg bg-muted/50">
           <p className="text-3xl font-bold">{spam.reports}</p>
-          <p className="text-xs text-muted-foreground">Reports</p>
+          <p className="text-xs text-muted-foreground">Total Reports</p>
         </div>
         <div className="text-center p-3 rounded-lg bg-muted/50">
-          <p className="text-3xl font-bold">{spam.sources.length}</p>
-          <p className="text-xs text-muted-foreground">Sources</p>
+          <p className="text-3xl font-bold">{spam.recentReports || 0}</p>
+          <p className="text-xs text-muted-foreground">Recent (30d)</p>
         </div>
       </div>
 
@@ -372,17 +372,9 @@ function SpamDetails({ spam }: { spam: SpamScore }) {
         </div>
       )}
 
-      {spam.lastReported && (
-        <p className="text-xs text-muted-foreground">
-          Last reported: {new Date(spam.lastReported).toLocaleDateString()}
-        </p>
-      )}
-
-      {spam.sources.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Sources: {spam.sources.join(', ')}
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Risk Level: <span className="font-bold uppercase text-foreground">{spam.riskLevel || 'LOW'}</span>
+      </p>
     </div>
   )
 }
@@ -492,8 +484,7 @@ function ReputationDetails({ reputation }: { reputation: ReputationInfo }) {
 
 function getSpamBorderColor(level: SpamScore['level']): string {
   switch (level) {
-    case 'critical': return 'border-l-red-500'
-    case 'high': return 'border-l-orange-500'
+    case 'high': return 'border-l-red-500'
     case 'medium': return 'border-l-yellow-500'
     case 'low': return 'border-l-blue-500'
     default: return 'border-l-green-500'
@@ -502,7 +493,6 @@ function getSpamBorderColor(level: SpamScore['level']): string {
 
 function getSpamBadgeVariant(level: SpamScore['level']): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'phonetrace' {
   switch (level) {
-    case 'critical': return 'destructive'
     case 'high': return 'destructive'
     case 'medium': return 'warning'
     case 'low': return 'info'

@@ -163,6 +163,9 @@ export const SpamScoreSchema = z.object({
   categories: z.array(z.string()).default([]),
   recentReports: z.number().default(0),
   riskLevel: z.enum(['low', 'medium', 'high', 'critical']).default('low'),
+  lastReported: z.string().nullable().optional(),
+  sources: z.array(z.string()).default([]),
+  details: z.record(z.string(), z.unknown()).optional(),
 })
 
 export type SpamScore = z.infer<typeof SpamScoreSchema>
@@ -220,6 +223,65 @@ export const PhoneLookupResultSchema = z.object({
 })
 
 export type PhoneLookupResult = z.infer<typeof PhoneLookupResultSchema>
+
+// ============================================
+// History & Pagination Schemas
+// ============================================
+
+export const LookupHistoryItemSchema = z.object({
+  id: z.string().optional(),
+  jobId: z.string(),
+  phone: z.string(),
+  maskedPhone: z.string().optional(),
+  countryCode: z.string().optional(),
+  status: z.enum(['pending', 'processing', 'completed', 'failed']),
+  startedAt: z.string().datetime().optional(),
+  completedAt: z.string().datetime().optional().nullable(),
+  carrier: CarrierInfoSchema.optional().nullable(),
+  location: LocationInfoSchema.optional().nullable(),
+  reputation: ReputationInfoSchema.optional().nullable(),
+  identity: IdentityInfoSchema.optional().nullable(),
+})
+
+export type LookupHistoryItem = z.infer<typeof LookupHistoryItemSchema>
+
+export function PaginatedResponseSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    items: z.array(itemSchema),
+    total: z.number(),
+    page: z.number(),
+    pageSize: z.number(),
+    totalPages: z.number(),
+    hasMore: z.boolean(),
+  })
+}
+
+export const JobStatusSchema = z.object({
+  jobId: z.string().uuid(),
+  status: z.enum(['pending', 'processing', 'completed', 'failed']),
+  progress: z.object({
+    current: z.number(),
+    total: z.number(),
+    currentModule: z.string().optional(),
+  }).optional(),
+})
+
+export function ApiResponseSchema<T extends z.ZodTypeAny>(dataSchema: T) {
+  return z.object({
+    success: z.boolean(),
+    data: dataSchema.optional(),
+    error: z.object({
+      code: z.string(),
+      message: z.string(),
+      details: z.record(z.string(), z.unknown()).optional(),
+    }).optional(),
+    meta: z.object({
+      requestId: z.string(),
+      timestamp: z.string().datetime(),
+      version: z.string(),
+    }),
+  })
+}
 
 // ============================================
 // Module Definitions

@@ -157,6 +157,8 @@ export class SpamScorer {
       score: finalScore,
       level,
       reports: totalReports,
+      recentReports: totalReports,
+      riskLevel: finalScore >= 80 ? 'critical' : finalScore >= 60 ? 'high' : finalScore >= 40 ? 'medium' : 'low',
       categories: Array.from(allCategories),
       lastReported: latestReport,
       sources: results.map((r) => r.source),
@@ -168,7 +170,6 @@ export class SpamScorer {
   }
 
   private static getSpamLevel(score: number): SpamScore['level'] {
-    if (score >= 80) return 'critical'
     if (score >= 60) return 'high'
     if (score >= 40) return 'medium'
     if (score >= 20) return 'low'
@@ -180,6 +181,8 @@ export class SpamScorer {
       score: 0,
       level: 'clean',
       reports: 0,
+      recentReports: 0,
+      riskLevel: 'low',
       categories: [],
       lastReported: null,
       sources: [],
