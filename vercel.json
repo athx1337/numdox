@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "regions": ["sin1", "bom1", "iad1"]
+  "installCommand": "npm install"
 }
