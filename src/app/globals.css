@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 20% 97%;
+    --foreground: 228 35% 15%;
+    --card: 45 25% 99%;
+    --card-foreground: 228 35% 15%;
+    --popover: 45 25% 99%;
+    --popover-foreground: 228 35% 15%;
+    --primary: 155 85% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 15% 90%;
+    --secondary-foreground: 228 35% 15%;
+    --muted: 45 15% 92%;
+    --muted-foreground: 228 15% 45%;
+    --accent: 215 70% 85%;
+    --accent-foreground: 228 35% 15%;
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 228 35% 15%;
+    --input: 228 35% 15%;
+    --ring: 155 85% 40%;
+    --radius: 0rem;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 158 82% 47%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 158 82% 47%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 32px 32px;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+::selection {
+  background: #22c55e;
+  color: #000000;
+}
+
+/* Signature Electric Green-to-Cyan Gradient for 'number.' */
+.rgb-flow {
+  background: linear-gradient(90deg, #22c55e 0%, #10b981 28%, #06b6d4 70%, #0ea5e9 100%) !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  display: inline-block;
+}
+
+/* Neo-brutalist Solid White / Black Shadows */
+.dark *[class*="shadow-"] {
+  --tw-shadow-color: #ffffff;
+}
+
+.dark .shadow-\[8px_8px_0_var\(--foreground\)\],
+.dark .shadow-\[8px_8px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 8px 8px 0px #ffffff !important;
+}
+
+.dark .shadow-\[6px_6px_0_var\(--foreground\)\],
+.dark .shadow-\[6px_6px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 6px 6px 0px #ffffff !important;
+}
+
+.dark .shadow-\[4px_4px_0_var\(--foreground\)\],
+.dark .shadow-\[3px_3px_0_var\(--foreground\)\],
+.dark .shadow-\[2px_2px_0_var\(--foreground\)\],
+.dark .shadow-\[3px_3px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 3px 3px 0px #ffffff !important;
+}
+
+:root:not(.dark) .shadow-\[8px_8px_0_var\(--foreground\)\],
+:root:not(.dark) .shadow-\[8px_8px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 8px 8px 0px #1e293b !important;
+}
+
+:root:not(.dark) .shadow-\[6px_6px_0_var\(--foreground\)\],
+:root:not(.dark) .shadow-\[6px_6px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 6px 6px 0px #1e293b !important;
+}
+
+:root:not(.dark) .shadow-\[4px_4px_0_var\(--foreground\)\],
+:root:not(.dark) .shadow-\[3px_3px_0_var\(--foreground\)\],
+:root:not(.dark) .shadow-\[2px_2px_0_var\(--foreground\)\],
+:root:not(.dark) .shadow-\[3px_3px_0_hsl\(var\(--foreground\)\)\] {
+  box-shadow: 3px 3px 0px #1e293b !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
