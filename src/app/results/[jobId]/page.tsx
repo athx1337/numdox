@@ -383,6 +383,17 @@ export default function ResultsPage() {
             </span>
           </div>
 
+          {identity?.details === 'RapidAPI Quota Exceeded' && (
+            <div className="mb-6 border-2 border-foreground border-l-4 border-l-amber-500 bg-amber-500/10 p-4 font-mono text-xs text-amber-800 dark:text-amber-300 shadow-[4px_4px_0_var(--foreground)]">
+              <div className="flex items-center gap-2 font-bold uppercase mb-1">
+                <span>⚠️ RapidAPI Directory Pool Quota Exhausted</span>
+              </div>
+              <p>
+                The shared RapidAPI key has reached its monthly call limit. Real person name resolution fell back to manual/banking UPI verification. You can configure your own key in <code className="bg-background px-1 border border-border">RAPIDAPI_TRUECALLER_KEY</code> to enable full automatic OSINT lookups.
+              </p>
+            </div>
+          )}
+
           {/* Operator Manual Name Recorder Form */}
           <form onSubmit={handleSavePersonName} className="mb-6 flex flex-col sm:flex-row gap-2 border-2 border-dashed border-border p-4 bg-muted/20">
             <input

@@ -64,62 +64,140 @@ app.get('/api/health', (c) => {
 // ============================================
 async function resolveTruecallerPool(phone: string, rapidApiKey?: string) {
   if (!rapidApiKey) {
+    console.log('resolveTruecallerPool: No API key configured')
     return { name: null, source: null, details: 'No RapidAPI Key Configured' }
   }
 
   const cleanDigits = phone.replace(/\D/g, '')
-  const nationalDigits = cleanDigits.startsWith('91') && cleanDigits.length === 12 ? cleanDigits.slice(2) : cleanDigits
+  const nationalDigits = cleanDigits.slice(-10)
+  const countryCode = 'IN'
+  const prefix = cleanDigits.startsWith('91') && cleanDigits.length === 12 ? '91' : cleanDigits.slice(0, -10) || '91'
+
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+  let quotaExceeded = false
 
   // 1. ViewCaller
   try {
-    const res = await fetch(`https://viewcaller.p.rapidapi.com/api/v1/search?code=91&number=${nationalDigits}`, {
+    const url = `https://viewcaller.p.rapidapi.com/api/v1/search?code=${prefix}&number=${nationalDigits}`
+    console.log(`Querying ViewCaller: ${url}`)
+    const res = await fetch(url, {
       headers: {
         'x-rapidapi-host': 'viewcaller.p.rapidapi.com',
         'x-rapidapi-key': rapidApiKey,
         'Content-Type': 'application/json',
+        'User-Agent': userAgent,
       },
     })
+    console.log(`ViewCaller Status: ${res.status}`)
+    if (res.status === 429) {
+      quotaExceeded = true
+    }
     if (res.ok) {
       const data: any = await res.json()
-      if (data?.status && Array.isArray(data?.data) && data.data[0]?.name) {
-        return { name: data.data[0].name.trim(), source: 'ViewCaller RapidAPI' }
+      console.log('ViewCaller Response:', JSON.stringify(data).slice(0, 200))
+      const items = data?.data || []
+      if (items && items.length > 0 && items[0]?.name) {
+        return { name: items[0].name.trim(), source: 'ViewCaller RapidAPI' }
       }
     }
-  } catch {}
+  } catch (err: any) {
+    console.error('ViewCaller Error:', err?.message || err)
+  }
 
-  // 2. Truecaller4
+  // 2. Truecaller-Data2
   try {
-    const res = await fetch(`https://truecaller4.p.rapidapi.com/api/v1/getDetails?countryCode=IN&phoneNumber=${nationalDigits}`, {
-      headers: {
-        'x-rapidapi-host': 'truecaller4.p.rapidapi.com',
-        'x-rapidapi-key': rapidApiKey,
-        'Content-Type': 'application/json',
-      },
-    })
-    if (res.ok) {
-      const data: any = await res.json()
-      if (Array.isArray(data?.data) && data.data[0]?.name) {
-        return { name: data.data[0].name.trim(), source: 'Truecaller4 RapidAPI' }
-      }
-    }
-  } catch {}
-
-  // 3. Truecaller-Data2
-  try {
-    const res = await fetch(`https://truecaller-data2.p.rapidapi.com/search/${cleanDigits}`, {
+    const url = `https://truecaller-data2.p.rapidapi.com/search/${cleanDigits}`
+    console.log(`Querying Truecaller-Data2: ${url}`)
+    const res = await fetch(url, {
       headers: {
         'x-rapidapi-host': 'truecaller-data2.p.rapidapi.com',
         'x-rapidapi-key': rapidApiKey,
         'Content-Type': 'application/json',
+        'User-Agent': userAgent,
       },
     })
+    console.log(`Truecaller-Data2 Status: ${res.status}`)
+    if (res.status === 429) {
+      quotaExceeded = true
+    }
     if (res.ok) {
       const data: any = await res.json()
-      if (data?.data?.basicInfo?.name) {
-        return { name: data.data.basicInfo.name.trim(), source: 'Truecaller Data2 RapidAPI' }
+      console.log('Truecaller-Data2 Response:', JSON.stringify(data).slice(0, 200))
+      const basic = data?.data?.basicInfo
+      if (basic && basic.name) {
+        return { name: basic.name.trim(), source: 'Truecaller-Data2 RapidAPI' }
       }
     }
-  } catch {}
+  } catch (err: any) {
+    console.error('Truecaller-Data2 Error:', err?.message || err)
+  }
+
+  // 3. Truecaller4
+  try {
+    const url = `https://truecaller4.p.rapidapi.com/api/v1/getDetails?phone=${cleanDigits}&countryCode=${countryCode}`
+    console.log(`Querying Truecaller4: ${url}`)
+    const res = await fetch(url, {
+      headers: {
+        'x-rapidapi-host': 'truecaller4.p.rapidapi.com',
+        'x-rapidapi-key': rapidApiKey,
+        'Content-Type': 'application/json',
+        'User-Agent': userAgent,
+      },
+    })
+    console.log(`Truecaller4 Status: ${res.status}`)
+    if (res.status === 429) {
+      quotaExceeded = true
+    }
+    if (res.ok) {
+      const data: any = await res.json()
+      console.log('Truecaller4 Response:', JSON.stringify(data).slice(0, 200))
+      const items = data?.data || []
+      if (items && items.length > 0 && items[0]?.name) {
+        return { name: items[0].name.trim(), source: 'Truecaller4 RapidAPI' }
+      }
+    }
+  } catch (err: any) {
+    console.error('Truecaller4 Error:', err?.message || err)
+  }
+
+  // 4. Truecaller-API11
+  try {
+    const url = 'https://truecaller-api11.p.rapidapi.com/v2.php'
+    console.log(`Querying Truecaller-API11: ${url}`)
+    const formData = new FormData()
+    formData.append('phone', nationalDigits)
+    formData.append('countryCode', countryCode.toLowerCase())
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-rapidapi-host': 'truecaller-api11.p.rapidapi.com',
+        'x-rapidapi-key': rapidApiKey,
+        'User-Agent': userAgent,
+      },
+      body: formData,
+    })
+    console.log(`Truecaller-API11 Status: ${res.status}`)
+    if (res.status === 429) {
+      quotaExceeded = true
+    }
+    if (res.ok) {
+      const data: any = await res.json()
+      console.log('Truecaller-API11 Response:', JSON.stringify(data).slice(0, 200))
+      const lookup = data?.truecaller_lookup
+      const name = lookup?.name || lookup?.caller_name
+      if (name) {
+        return { name: name.trim(), source: 'Truecaller-API11 RapidAPI' }
+      }
+    }
+  } catch (err: any) {
+    console.error('Truecaller-API11 Error:', err?.message || err)
+  }
+
+  if (quotaExceeded) {
+    return { name: null, source: null, details: 'RapidAPI Quota Exceeded' }
+  }
 
   return { name: null, source: null, details: 'No directory match found in pool' }
 }
@@ -168,6 +246,7 @@ app.post('/api/v1/phone/lookup', async (c) => {
           primaryName: idResult.name,
           confidence: idResult.name ? 'high' : 'unresolved',
           source: idResult.source || 'Waterfall Pool',
+          details: idResult.details || undefined,
           namesDiscovered: idResult.name
             ? [
                 {

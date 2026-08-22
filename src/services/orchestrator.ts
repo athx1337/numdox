@@ -62,6 +62,11 @@ export class PhoneOrchestrator {
   private static jobProgress: Map<string, LookupProgress> = globalJobProgress
   private static jobResults: Map<string, PhoneLookupResult> = globalJobResults
 
+  static setPrecompletedResult(jobId: string, result: PhoneLookupResult, progress: LookupProgress): void {
+    this.jobResults.set(jobId, result)
+    this.jobProgress.set(jobId, progress)
+  }
+
   static async startLookup(
     request: PhoneLookupRequest,
     userId?: string,

@@ -168,8 +168,101 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const request = parseResult.data
 
-    // Start async lookup
-    const jobId = await PhoneOrchestrator.startLookup(
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://numdox.phish-x.workers.dev'
+    let jobId = crypto.randomUUID()
+
+    try {
+      console.log(`Forwarding lookup request to Cloudflare Worker: ${backendUrl}/api/v1/phone/lookup`)
+      const workerRes = await fetch(`${backendUrl}/api/v1/phone/lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: request.phone, countryCode: request.countryCode }),
+      })
+
+      if (workerRes.ok) {
+        const workerData = await workerRes.json()
+        if (workerData.success && workerData.data) {
+          const result = workerData.data
+          jobId = result.jobId || jobId
+          result.jobId = jobId
+
+          const modules = request.modules.map((name) => ({
+            name,
+            status: 'completed' as const,
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+          }))
+
+          const progress = {
+            jobId,
+            status: 'completed' as const,
+            progress: {
+              current: modules.length,
+              total: modules.length,
+              currentModule: '',
+              modules,
+            },
+          }
+
+          PhoneOrchestrator.setPrecompletedResult(jobId, result, progress)
+
+          try {
+            await db.insert(phoneLookups).values({
+              jobId,
+              userId: auth.userId,
+              apiKeyId: auth.apiKeyId,
+              phone: request.phone,
+              maskedPhone: request.phone.replace(/.(?=.{4})/g, '*'),
+              countryCode: request.countryCode,
+              modules: request.modules,
+              status: 'completed',
+              startedAt: new Date(),
+              completedAt: new Date(),
+              validation: result.validation,
+              carrier: result.carrier,
+              location: result.location,
+              social: result.social,
+              breaches: result.breaches,
+              spam: result.spam,
+              reputation: result.reputation,
+              ipAddress: ip,
+              userAgent: req.headers.get('user-agent') || undefined,
+            })
+          } catch (dbErr) {
+            console.warn('DB update skipped:', dbErr)
+          }
+
+          return NextResponse.json(
+            {
+              success: true,
+              data: {
+                jobId,
+                status: 'completed',
+                pollUrl: `/api/v1/phone/lookup/${jobId}`,
+                streamUrl: `/api/v1/phone/lookup/${jobId}/stream`,
+              },
+              meta: {
+                requestId,
+                timestamp: new Date().toISOString(),
+                version: '0.1.0',
+              },
+            },
+            {
+              headers: {
+                'X-RateLimit-Limit': rateLimit.requests.toString(),
+                'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+                'X-RateLimit-Reset': Math.ceil(rateLimitResult.resetAt / 1000).toString(),
+              },
+            }
+          )
+        }
+      }
+    } catch (fetchErr) {
+      console.error('Failed to query Cloudflare Worker, falling back to local orchestrator:', fetchErr)
+    }
+
+    // Start async lookup locally as fallback
+    const localJobId = await PhoneOrchestrator.startLookup(
       request,
       auth.userId,
       auth.apiKeyId,
@@ -178,17 +271,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
 
     // Get initial status for response
-    const progress = PhoneOrchestrator.getJobStatus(jobId)
+    const progress = PhoneOrchestrator.getJobStatus(localJobId)
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          jobId,
+          jobId: localJobId,
           status: 'pending',
           progress: progress?.progress,
-          pollUrl: `/api/v1/phone/lookup/${jobId}`,
-          streamUrl: `/api/v1/phone/lookup/${jobId}/stream`,
+          pollUrl: `/api/v1/phone/lookup/${localJobId}`,
+          streamUrl: `/api/v1/phone/lookup/${localJobId}/stream`,
         },
         meta: {
           requestId,

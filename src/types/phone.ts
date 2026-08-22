@@ -119,6 +119,7 @@ export const IdentityInfoSchema = z.object({
   })).default([]),
   confidence: z.enum(['high', 'medium', 'low']).default('low'),
   source: z.string().optional(),
+  details: z.string().optional(),
   upiHandles: z.array(z.object({
     app: z.string(),
     vpa: z.string(),
