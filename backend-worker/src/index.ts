@@ -141,9 +141,28 @@ async function resolveCallerIdentity(phone: string, env: Env) {
   const prefix = isIndia ? '91' : cleanDigits.slice(0, -10) || '1'
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-  // 1. Truecaller Web Session with Cookie (Astro/SSR Page Lookup)
-  const cookieString = (env.TRUECALLER_COOKIE || (env.TRUECALLER_AUTH_TOKEN?.includes('tc_user=') ? env.TRUECALLER_AUTH_TOKEN : '')).trim()
-  if (cookieString) {
+  // 1. Truecaller Web Session with Cookie Pool (Astro/SSR Page Lookup)
+  const cleanCookie = (c: string) =>
+    c.trim().replace(/^["']|["']$/g, '').replace(/^Cookie:?\s*/i, '').trim()
+
+  const cookiePool: string[] = []
+  const rawPool = (env as any).TRUECALLER_COOKIE_POOL || ''
+  if (rawPool.trim().startsWith('[') && rawPool.trim().endsWith(']')) {
+    try {
+      const parsed = JSON.parse(rawPool.trim())
+      if (Array.isArray(parsed)) cookiePool.push(...parsed.map(cleanCookie).filter(Boolean))
+    } catch {}
+  } else if (rawPool.includes('|||')) {
+    cookiePool.push(...rawPool.split('|||').map(cleanCookie).filter(Boolean))
+  }
+
+  const single = env.TRUECALLER_COOKIE || (env.TRUECALLER_AUTH_TOKEN?.includes('tc_user=') ? env.TRUECALLER_AUTH_TOKEN : '')
+  if (single) {
+    const cleaned = cleanCookie(single)
+    if (cleaned && !cookiePool.includes(cleaned)) cookiePool.push(cleaned)
+  }
+
+  for (const currentCookie of cookiePool) {
     try {
       const webUrl = isIndia
         ? `https://www.truecaller.com/search/in/${nationalDigits}`
@@ -151,7 +170,7 @@ async function resolveCallerIdentity(phone: string, env: Env) {
 
       const webRes = await fetch(webUrl, {
         headers: {
-          Cookie: cookieString.startsWith('Cookie:') ? cookieString.replace(/^Cookie:\s*/i, '') : cookieString,
+          Cookie: currentCookie,
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           Referer: 'https://www.truecaller.com/',
@@ -161,6 +180,11 @@ async function resolveCallerIdentity(phone: string, env: Env) {
 
       if (webRes.ok) {
         const html = await webRes.text()
+        if (/limit exceeded|too many requests/i.test(html)) {
+          // Quota exceeded for this session; continue to next session in pool
+          continue
+        }
+
         const astroBoldMatch = html.match(/<div class="[^"]*font-bold[^"]*"[^>]*>\s*([^<]+?)\s*<\/div>/i)
         const vcfMatch = html.match(/download="([^"]+)\.vcf"/i)
         const titleMatch =

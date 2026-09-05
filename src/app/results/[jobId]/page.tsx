@@ -539,8 +539,13 @@ export default function ResultsPage() {
                 NO RELIABLE NAME FOUND
               </h3>
               <p className="font-mono text-xs text-muted-foreground mt-1">
-                No verified person name directly linked to this phone number was discovered across indexed public web sources, GitHub repositories, or public documents. NUMDOX strictly reports real OSINT data and does not simulate or fabricate identity records.
+                {identity?.details || 'No verified person name directly linked to this phone number was discovered across indexed public web sources, GitHub repositories, or public documents. NUMDOX strictly reports real OSINT data and does not simulate or fabricate identity records.'}
               </p>
+              {isIndia && (
+                <div className="mt-3 border border-primary/30 bg-primary/10 p-2.5 font-mono text-xs text-foreground flex items-center justify-between gap-2">
+                  <span>💡 Direct Verification: Check the NPCI UPI banking handles below to resolve the registered bank account name in real time.</span>
+                </div>
+              )}
             </div>
           ) : null}
 

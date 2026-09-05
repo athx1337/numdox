@@ -85,8 +85,8 @@ export class IdentityFinderService {
       details = `Identity candidate correlated from ${primaryCandidate?.supportingSourcesCount || 1} public sources`
     } else {
       const dirStatus = result.collectorStatuses.find((s) => s.type === 'directories')
-      if (dirStatus?.status === 'unavailable') {
-        details = 'RapidAPI pool quota exhausted (scanned public web, GitHub, and document indices; no public name found)'
+      if (dirStatus?.message) {
+        details = `${dirStatus.message} (Scanned public web, GitHub, and document indices; no other public name found)`
       } else {
         details = 'No verified person name directly linked to this number in publicly indexed records'
       }

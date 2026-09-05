@@ -33,30 +33,52 @@ export class DirectoryCollector implements Collector {
     const isIndia = phone.isIndia
     const prefix = phone.countryCallingCode.replace('+', '') || '91'
 
-    // Determine cookie & token from env or combined inputs
-    let cookieString = (this.truecallerCookie || '').trim()
-    let authToken = (this.truecallerToken || '').trim()
+    // Collect cookies from pool or single env variable
+    const rawPool = process.env.TRUECALLER_COOKIE_POOL || process.env.TRUECALLER_COOKIES || ''
+    const rawSingle = this.truecallerCookie || process.env.TRUECALLER_COOKIE || ''
+    const rawToken = this.truecallerToken || process.env.TRUECALLER_AUTH_TOKEN || ''
 
-    // If truecallerToken was passed a full cookie string, normalize it
-    if (!cookieString && authToken.includes('tc_user=')) {
-      cookieString = authToken
-      authToken = ''
-    }
+    const cleanCookie = (c: string) =>
+      c.trim().replace(/^["']|["']$/g, '').replace(/^Cookie:?\s*/i, '').trim()
 
-    // Attempt extracting inner token from cookie if authToken is not set
-    if (!authToken && cookieString.includes('tc_user=')) {
+    let cookiePool: string[] = []
+    if (rawPool.trim().startsWith('[') && rawPool.trim().endsWith(']')) {
       try {
-        const match = cookieString.match(/tc_user=([^;]+)/)
-        if (match) {
-          const decoded = decodeURIComponent(match[1])
-          const parsed = JSON.parse(decoded)
-          if (parsed.token) authToken = parsed.token
+        const parsed = JSON.parse(rawPool.trim())
+        if (Array.isArray(parsed)) {
+          cookiePool.push(...parsed.map(cleanCookie).filter(Boolean))
         }
       } catch {}
+    } else if (rawPool.includes('|||')) {
+      cookiePool.push(...rawPool.split('|||').map(cleanCookie).filter(Boolean))
+    } else if (rawPool.includes('\n')) {
+      cookiePool.push(...rawPool.split('\n').map(cleanCookie).filter(Boolean))
     }
 
-    // 1. Truecaller Web Session with Cookie (Astro/SSR Page Lookup)
-    if (cookieString) {
+    if (rawSingle) {
+      const cleaned = cleanCookie(rawSingle)
+      if (cleaned && !cookiePool.includes(cleaned)) {
+        cookiePool.push(cleaned)
+      }
+    }
+
+    if (rawToken && rawToken.includes('tc_user=')) {
+      const cleaned = cleanCookie(rawToken)
+      if (cleaned && !cookiePool.includes(cleaned)) {
+        cookiePool.push(cleaned)
+      }
+    }
+
+    let authToken = ''
+    if (rawToken && !rawToken.includes('tc_user=')) {
+      authToken = rawToken.trim()
+    }
+
+    let truecallerSessionExhausted = false
+
+    // 1. Truecaller Web Session Pool (Astro/SSR Page Lookup with automatic failover)
+    for (let i = 0; i < cookiePool.length; i++) {
+      const currentCookie = cookiePool[i]
       try {
         const webUrl = isIndia
           ? `https://www.truecaller.com/search/in/${raw10}`
@@ -64,7 +86,7 @@ export class DirectoryCollector implements Collector {
 
         const webRes = await fetch(webUrl, {
           headers: {
-            Cookie: cookieString.startsWith('Cookie:') ? cookieString.replace(/^Cookie:\s*/i, '') : cookieString,
+            Cookie: currentCookie,
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0',
             Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             Referer: 'https://www.truecaller.com/',
@@ -75,7 +97,10 @@ export class DirectoryCollector implements Collector {
         if (webRes.ok) {
           const html = await webRes.text()
           if (/limit exceeded|too many requests/i.test(html)) {
+            truecallerSessionExhausted = true
             quotaExceeded = true
+            // Try next session in pool if available
+            continue
           }
 
           // Method A: vCard download attribute (e.g. aniket-chandra.vcf)
@@ -142,7 +167,8 @@ export class DirectoryCollector implements Collector {
           }
         }
       } catch {
-        // Fallthrough to token API
+        // Fallthrough to next cookie in pool
+        continue
       }
     }
 
@@ -289,13 +315,29 @@ export class DirectoryCollector implements Collector {
         resultsCount: evidenceItems.length,
         message: 'Resolved candidate from caller ID directory pool.',
       })
+    } else if (truecallerSessionExhausted) {
+      onProgress?.({
+        name: this.name,
+        type: this.type,
+        status: 'unavailable',
+        resultsCount: 0,
+        message: 'Truecaller daily search quota reached on active session(s). Use UPI banking verification or rotate session cookie.',
+      })
     } else if (quotaExceeded) {
       onProgress?.({
         name: this.name,
         type: this.type,
         status: 'unavailable',
         resultsCount: 0,
-        message: 'RapidAPI pool quota exhausted (skipped; running other public collectors)',
+        message: 'Directory pool quota exhausted (skipped; running other public collectors)',
+      })
+    } else if (cookiePool.length === 0) {
+      onProgress?.({
+        name: this.name,
+        type: this.type,
+        status: 'unavailable',
+        resultsCount: 0,
+        message: 'No active Truecaller web session configured (add TRUECALLER_COOKIE in environment variables).',
       })
     } else {
       onProgress?.({
