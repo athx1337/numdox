@@ -147,4 +147,4 @@ NUMDOX is designed strictly for authorized security assessments, OSINT investiga
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the MIT License.

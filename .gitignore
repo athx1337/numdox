@@ -40,8 +40,13 @@ yarn-debug.log*
 yarn-error.log*
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
+
+# Cloudflare Wrangler & Build artifacts
+.wrangler/
+*.tsbuildinfo
 
 # Temporary directories
 scratch/
