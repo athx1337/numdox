@@ -81,6 +81,21 @@ export default function ResultsPage() {
   React.useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null
 
+    // Immediate hydration from sessionStorage if available (from synchronous lookup)
+    try {
+      const cached = sessionStorage.getItem(`numdox_${jobId}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        setResult(parsed)
+        if (parsed.identity?.primaryName && !confirmedPersonName) {
+          setConfirmedPersonName(parsed.identity.primaryName)
+        }
+        if (parsed.status === 'completed') {
+          setIsLoading(false)
+        }
+      }
+    } catch {}
+
     const fetchResult = async () => {
       try {
         const response = await fetch(`/api/v1/phone/lookup/${jobId}`)

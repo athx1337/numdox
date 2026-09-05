@@ -72,8 +72,9 @@ export class PhoneOrchestrator {
     userId?: string,
     apiKeyId?: string,
     ipAddress?: string,
-    userAgent?: string
-  ): Promise<string> {
+    userAgent?: string,
+    awaitCompletion = false
+  ): Promise<{ jobId: string; result?: PhoneLookupResult }> {
     const jobId = generateId()
     const maskedPhone = this.maskPhone(request.phone)
 
@@ -118,17 +119,28 @@ export class PhoneOrchestrator {
       },
     })
 
-    // Start async processing
-    this.processLookup(jobId, request).catch((error) => {
+    // Start processing (await if requested, or execute in background)
+    const promise = this.processLookup(jobId, request)
+    if (awaitCompletion) {
+      try {
+        const result = await promise
+        return { jobId, result }
+      } catch (err) {
+        console.error(`Lookup ${jobId} failed:`, err)
+        return { jobId }
+      }
+    }
+
+    promise.catch((error) => {
       console.error(`Lookup ${jobId} failed:`, error)
       const message = error instanceof Error ? error.message : String(error)
       this.updateJobStatus(jobId, 'failed', message)
     })
 
-    return jobId
+    return { jobId }
   }
 
-  private static async processLookup(jobId: string, request: PhoneLookupRequest): Promise<void> {
+  private static async processLookup(jobId: string, request: PhoneLookupRequest): Promise<PhoneLookupResult> {
     this.updateJobStatus(jobId, 'processing')
 
     try {
@@ -262,6 +274,7 @@ export class PhoneOrchestrator {
       }
 
       this.updateJobStatus(jobId, 'completed', undefined, finalResult)
+      return finalResult
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       
@@ -297,6 +310,7 @@ export class PhoneOrchestrator {
       }
 
       this.updateJobStatus(jobId, 'failed', errorMessage)
+      return failedResult
     }
   }
 

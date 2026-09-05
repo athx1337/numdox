@@ -168,16 +168,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const request = parseResult.data
 
-    // Start async lookup via local NUMDOX PhoneOrchestrator
-    const localJobId = await PhoneOrchestrator.startLookup(
+    // Execute lookup (await completion so serverless lambda containers do not freeze background work)
+    const { jobId: localJobId, result } = await PhoneOrchestrator.startLookup(
       request,
       auth.userId,
       auth.apiKeyId,
       ip,
-      req.headers.get('user-agent') || undefined
+      req.headers.get('user-agent') || undefined,
+      true
     )
 
-    // Get initial status for response
+    // Get final or initial status for response
     const progress = PhoneOrchestrator.getJobStatus(localJobId)
 
     return NextResponse.json(
@@ -185,7 +186,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         success: true,
         data: {
           jobId: localJobId,
-          status: 'pending',
+          status: result ? result.status : 'pending',
+          result: result || undefined,
           progress: progress?.progress,
           pollUrl: `/api/v1/phone/lookup/${localJobId}`,
           streamUrl: `/api/v1/phone/lookup/${localJobId}/stream`,

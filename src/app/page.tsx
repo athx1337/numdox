@@ -97,6 +97,12 @@ function HomeContent() {
         throw new Error(data.error?.message || 'Lookup failed')
       }
 
+      if (data.data?.result) {
+        try {
+          sessionStorage.setItem(`numdox_${data.data.jobId}`, JSON.stringify(data.data.result))
+        } catch {}
+      }
+
       router.push(`/results/${data.data.jobId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during lookup')
