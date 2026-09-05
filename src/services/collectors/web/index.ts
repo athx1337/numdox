@@ -53,8 +53,42 @@ export class WebCollector implements Collector {
 
     const discoveredUrls: Array<{ url: string; title: string; snippet: string; matchedPhone: string }> = []
 
-    // 2. Query DuckDuckGo Public HTML Search for each query
-    for (const query of searchQueries.slice(0, 3)) {
+    // 2. Query Serper.dev Google Search API if configured (bypasses bot challenges)
+    const serperKey = process.env.SERPER_API_KEY
+    if (serperKey) {
+      try {
+        const serperRes = await fetch('https://google.serper.dev/search', {
+          method: 'POST',
+          headers: {
+            'X-API-KEY': serperKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: `"${phone.e164}" OR "${phone.national}"`,
+            gl: phone.isIndia ? 'in' : 'us',
+            num: 10,
+          }),
+          signal: AbortSignal.timeout(5000),
+        })
+        if (serperRes.ok) {
+          const serperData: any = await serperRes.json()
+          for (const item of serperData?.organic || []) {
+            if (item.link) {
+              discoveredUrls.push({
+                url: item.link,
+                title: item.title || '',
+                snippet: item.snippet || '',
+                matchedPhone: phone.e164,
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Fallback: Query DuckDuckGo Public HTML Search for each query
+    if (discoveredUrls.length === 0) {
+      for (const query of searchQueries.slice(0, 3)) {
       try {
         const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
         const res = await fetch('https://html.duckduckgo.com/html/', {
@@ -113,6 +147,7 @@ export class WebCollector implements Collector {
         continue
       }
     }
+  }
 
     onProgress?.({
       name: this.name,

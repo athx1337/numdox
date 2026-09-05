@@ -36,13 +36,17 @@ export class DirectoryCollector implements Collector {
     if (this.truecallerToken) {
       try {
         const tcUrl = `https://search5-noneu.truecaller.com/v2/search?q=${encodeURIComponent(phone.e164)}&countryCode=${isIndia ? 'in' : 'us'}&type=4`
+        const cleanToken = this.truecallerToken.replace(/^Bearer\s+/i, '').trim()
+        const isJwt = cleanToken.startsWith('eyJ')
         const tcRes = await fetch(tcUrl, {
           headers: {
-            Authorization: `Bearer ${this.truecallerToken}`,
-            'User-Agent': 'Truecaller/13.35.6 (Android;13)',
+            Authorization: `Bearer ${cleanToken}`,
+            'User-Agent': isJwt
+              ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+              : 'Truecaller/13.35.6 (Android;13)',
             Accept: 'application/json',
           },
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(4000),
         })
 
         if (tcRes.ok) {
