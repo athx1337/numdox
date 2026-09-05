@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 export interface Env {
   RAPIDAPI_TRUECALLER_KEY?: string
   TRUECALLER_AUTH_TOKEN?: string
+  TRUECALLER_COOKIE?: string
   NUMVERIFY_API_KEY?: string
   ABSTRACT_API_KEY?: string
   ENVIRONMENT?: string
@@ -140,8 +141,59 @@ async function resolveCallerIdentity(phone: string, env: Env) {
   const prefix = isIndia ? '91' : cleanDigits.slice(0, -10) || '1'
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-  // 1. Direct Truecaller Official API (if TRUECALLER_AUTH_TOKEN configured)
-  if (env.TRUECALLER_AUTH_TOKEN) {
+  // 1. Truecaller Web Session with Cookie (Astro/SSR Page Lookup)
+  const cookieString = (env.TRUECALLER_COOKIE || (env.TRUECALLER_AUTH_TOKEN?.includes('tc_user=') ? env.TRUECALLER_AUTH_TOKEN : '')).trim()
+  if (cookieString) {
+    try {
+      const webUrl = isIndia
+        ? `https://www.truecaller.com/search/in/${nationalDigits}`
+        : `https://www.truecaller.com/search/global/${encodeURIComponent(phone)}`
+
+      const webRes = await fetch(webUrl, {
+        headers: {
+          Cookie: cookieString.startsWith('Cookie:') ? cookieString.replace(/^Cookie:\s*/i, '') : cookieString,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          Referer: 'https://www.truecaller.com/',
+        },
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (webRes.ok) {
+        const html = await webRes.text()
+        const astroBoldMatch = html.match(/<div class="[^"]*font-bold[^"]*"[^>]*>\s*([^<]+?)\s*<\/div>/i)
+        const vcfMatch = html.match(/download="([^"]+)\.vcf"/i)
+        const titleMatch =
+          html.match(/<title>([^<]+?)\s*-\s*Who called/i) ||
+          html.match(/meta\s+property=["']og:title["']\s+content=["']([^"']+?)\s*-\s*Who called/i)
+
+        let foundName: string | null = null
+        if (astroBoldMatch && astroBoldMatch[1].trim().length > 1 && !/limit exceeded|sign in/i.test(astroBoldMatch[1])) {
+          foundName = astroBoldMatch[1].trim()
+        } else if (vcfMatch && vcfMatch[1].trim().length > 1) {
+          foundName = vcfMatch[1].trim().replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+        } else if (titleMatch && titleMatch[1].trim().length > 1) {
+          foundName = titleMatch[1].trim()
+        }
+
+        if (
+          foundName &&
+          foundName.length > 1 &&
+          !foundName.toLowerCase().includes('reverse phone') &&
+          !foundName.toLowerCase().includes('search limit')
+        ) {
+          return {
+            name: foundName,
+            source: 'Truecaller Web Verification',
+            details: 'Verified caller ID record from Truecaller authenticated web session',
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Direct Truecaller Official API (if TRUECALLER_AUTH_TOKEN configured)
+  if (env.TRUECALLER_AUTH_TOKEN && !env.TRUECALLER_AUTH_TOKEN.includes('tc_user=')) {
     try {
       const tcUrl = `https://search5-noneu.truecaller.com/v2/search?q=${encodeURIComponent(phone.startsWith('+') ? phone : `+${cleanDigits}`)}&countryCode=${countryCode.toLowerCase()}&type=4`
       const res = await fetch(tcUrl, {
