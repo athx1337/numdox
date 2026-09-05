@@ -113,9 +113,11 @@ function HomeContent() {
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
       <header className="mx-auto flex max-w-[1480px] items-center justify-between px-5 py-5 md:px-10">
         <a href="#top" className="flex items-center gap-3" aria-label="numdox home">
-          <span className="grid size-9 place-items-center border-2 border-foreground bg-primary text-primary-foreground shadow-[3px_3px_0_var(--foreground)]">
-            <Hash className="size-5" />
-          </span>
+          <img
+            src="/logo.png"
+            alt="numdox logo"
+            className="size-9 border-2 border-foreground bg-primary shadow-[3px_3px_0_var(--foreground)] object-contain"
+          />
           <span className="font-mono text-lg font-black tracking-[-0.08em]">
             numdox<span className="text-primary">.</span>
           </span>

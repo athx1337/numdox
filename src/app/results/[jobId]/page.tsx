@@ -11,16 +11,22 @@ import {
   Building2,
   Check,
   CheckCircle,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Clock3,
+  Code2,
   Copy,
+  Database,
   Download,
   ExternalLink,
+  FileText,
   Fingerprint,
   Globe,
   Globe2,
   Hash,
   Loader2,
+  Mail,
   MapPin,
   Menu,
   Network,
@@ -50,6 +56,7 @@ export default function ResultsPage() {
   const jobId = params.jobId as string
   const [quickPhone, setQuickPhone] = React.useState('')
   const [manualNameInput, setManualNameInput] = React.useState('')
+  const [showManualOverride, setShowManualOverride] = React.useState(false)
   const [confirmedPersonName, setConfirmedPersonName] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<{
     jobId: string
@@ -245,7 +252,9 @@ export default function ResultsPage() {
             onClick={() => router.push('/')}
             className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.12em] hover:text-primary transition-colors font-bold"
           >
-            <ArrowLeft className="size-4" /> numdox results
+            <ArrowLeft className="size-4" />
+            <img src="/logo.png" alt="numdox logo" className="size-5 border border-foreground bg-primary object-contain inline-block shadow-[1px_1px_0_var(--foreground)]" />
+            numdox results
           </button>
 
           <span className="hidden font-mono text-xs text-muted-foreground sm:inline">
@@ -357,7 +366,7 @@ export default function ResultsPage() {
                     <Loader2 className="size-3 animate-spin" /> Resolving...
                   </span>
                 ) : (
-                  resolvedPersonName || 'Pending Banking/Truecaller Confirmation'
+                  resolvedPersonName || 'No Reliable Public Name'
                 )
               }
             />
@@ -383,65 +392,265 @@ export default function ResultsPage() {
             </span>
           </div>
 
-          {identity?.details === 'RapidAPI Quota Exceeded' && (
-            <div className="mb-6 border-2 border-foreground border-l-4 border-l-amber-500 bg-amber-500/10 p-4 font-mono text-xs text-amber-800 dark:text-amber-300 shadow-[4px_4px_0_var(--foreground)]">
-              <div className="flex items-center gap-2 font-bold uppercase mb-1">
-                <span>⚠️ RapidAPI Directory Pool Quota Exhausted</span>
+          {/* Modular Public Collector Sources Status Grid */}
+          <div className="mb-6 border-2 border-border bg-muted/20 p-4">
+            <div className="flex items-center justify-between mb-3 border-b border-border/40 pb-2">
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary">
+                Multi-Source Collector Status
+              </p>
+              <span className="font-mono text-[10px] text-muted-foreground uppercase">
+                Non-blocking architecture
+              </span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  name: 'Public Web Search',
+                  type: 'web',
+                  icon: Globe,
+                  fallbackCount: identity?.namesDiscovered?.filter((n: any) => n.source?.toLowerCase().includes('web')).length || 0,
+                },
+                {
+                  name: 'GitHub Public OSINT',
+                  type: 'github',
+                  icon: Code2,
+                  fallbackCount: identity?.namesDiscovered?.filter((n: any) => n.source?.toLowerCase().includes('github')).length || 0,
+                },
+                {
+                  name: 'Public Documents',
+                  type: 'documents',
+                  icon: FileText,
+                  fallbackCount: identity?.namesDiscovered?.filter((n: any) => n.source?.toLowerCase().includes('doc')).length || 0,
+                },
+                {
+                  name: 'Caller ID Directories',
+                  type: 'directories',
+                  icon: Database,
+                  fallbackCount: identity?.namesDiscovered?.filter((n: any) => n.source?.toLowerCase().includes('caller') || n.source?.toLowerCase().includes('rapid')).length || 0,
+                },
+              ].map((col) => {
+                const statusObj = identity?.collectorStatuses?.find((s: any) => s.type === col.type)
+                const isScanning = isIdentityLoading && (!statusObj || statusObj.status === 'scanning')
+                const isUnavailable = statusObj?.status === 'unavailable' || (!isIdentityLoading && col.type === 'directories' && identity?.details === 'RapidAPI Quota Exceeded')
+                const resultsCount = statusObj?.resultsCount !== undefined ? statusObj.resultsCount : col.fallbackCount
+
+                return (
+                  <div
+                    key={col.type}
+                    className={`border-2 p-3 font-mono ${
+                      isUnavailable
+                        ? 'border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                        : isScanning
+                        ? 'border-primary/50 bg-primary/5 text-foreground'
+                        : 'border-border bg-background text-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <col.icon className="size-3.5 text-primary" />
+                        <span className="text-[11px] font-bold">{col.name}</span>
+                      </div>
+                      {isScanning ? (
+                        <Loader2 className="size-3 animate-spin text-primary" />
+                      ) : isUnavailable ? (
+                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">OFFLINE</span>
+                      ) : (
+                        <CheckCircle className="size-3 text-green-500" />
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                      <span>Status:</span>
+                      <span className="font-bold">
+                        {isScanning
+                          ? 'Scanning...'
+                          : isUnavailable
+                          ? 'Quota Exhausted (Skipped)'
+                          : `${resultsCount} finding(s)`}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-[10px] font-mono text-muted-foreground">
+              ✓ Single-source bottlenecks eliminated: directory quota limits fail over gracefully without halting web, document, or GitHub collectors.
+            </p>
+          </div>
+
+          {/* Primary Identity Candidate Card OR No Reliable Name Found */}
+          {resolvedPersonName ? (
+            <div className="mb-6 border-2 border-foreground border-l-4 border-l-green-500 bg-green-500/10 p-5 shadow-[4px_4px_0_var(--foreground)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-green-500/30 pb-3 mb-3">
+                <span className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-green-700 dark:text-green-400">
+                  Name Associated with Number (Identity Candidate)
+                </span>
+                <span className="border border-green-500 bg-green-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-green-700 dark:text-green-300">
+                  {identity?.confidence ? `${identity.confidence} Confidence` : 'Correlated Candidate'}
+                </span>
               </div>
-              <p>
-                The shared RapidAPI key has reached its monthly call limit. Real person name resolution fell back to manual/banking UPI verification. You can configure your own key in <code className="bg-background px-1 border border-border">RAPIDAPI_TRUECALLER_KEY</code> to enable full automatic OSINT lookups.
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-mono text-2xl sm:text-3xl font-black tracking-[-0.05em] text-foreground">
+                    {resolvedPersonName}
+                  </h3>
+                  <p className="font-mono text-xs text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2">
+                    <span>{identity?.details || 'Correlated across independent public data mentions'}</span>
+                    {identity?.namesDiscovered?.[0]?.supportingSourcesCount ? (
+                      <span className="border border-border bg-background px-1.5 py-0.5 text-[10px] font-bold text-foreground">
+                        {identity.namesDiscovered[0].supportingSourcesCount} supporting public source(s)
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                {confirmedPersonName !== resolvedPersonName && (
+                  <button
+                    onClick={() => {
+                      setConfirmedPersonName(resolvedPersonName)
+                      toast({ title: 'Candidate Confirmed', description: `Report subject profile set to: ${resolvedPersonName}` })
+                    }}
+                    className="border-2 border-foreground bg-primary px-4 py-2 font-mono text-xs font-bold uppercase text-primary-foreground shadow-[3px_3px_0_var(--foreground)] hover:translate-x-0.5 hover:translate-y-0.5 transition-transform shrink-0"
+                  >
+                    Confirm Candidate
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : !isIdentityLoading ? (
+            <div className="mb-6 border-2 border-foreground border-l-4 border-l-muted-foreground bg-muted/20 p-5 shadow-[4px_4px_0_var(--foreground)]">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em]">Identity Assessment</span>
+              </div>
+              <h3 className="font-mono text-xl font-black text-foreground">
+                NO RELIABLE NAME FOUND
+              </h3>
+              <p className="font-mono text-xs text-muted-foreground mt-1">
+                No verified person name directly linked to this phone number was discovered across indexed public web sources, GitHub repositories, or public documents. NUMDOX strictly reports real OSINT data and does not simulate or fabricate identity records.
               </p>
             </div>
-          )}
+          ) : null}
 
-          {/* Operator Manual Name Recorder Form */}
-          <form onSubmit={handleSavePersonName} className="mb-6 flex flex-col sm:flex-row gap-2 border-2 border-dashed border-border p-4 bg-muted/20">
-            <input
-              value={manualNameInput}
-              onChange={(e) => setManualNameInput(e.target.value)}
-              placeholder="Record verified person name (e.g. from Truecaller / UPI confirmation)..."
-              className="flex-1 border-2 border-border bg-background px-4 py-2 font-mono text-xs outline-none focus:border-primary"
-            />
-            <button
-              type="submit"
-              className="border-2 border-foreground bg-primary px-5 py-2 font-mono text-xs font-bold uppercase text-primary-foreground shadow-[3px_3px_0_var(--foreground)] hover:translate-x-0.5 hover:translate-y-0.5 transition-transform"
-            >
-              Set Verified Name
-            </button>
-          </form>
-
-          {/* Automatically Discovered Names from Public Search & GitHub */}
+          {/* Discovered Person Names & Clickable Evidence Provenance */}
           {identity.namesDiscovered && identity.namesDiscovered.length > 0 && (
             <div className="mb-6 border-2 border-border bg-background p-4">
-              <p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary mb-3">
-                Discovered Person Names & Aliases ({identity.namesDiscovered.length})
-              </p>
-              <div className="space-y-2">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary">
+                  Public Evidence & Discovered Names ({identity.namesDiscovered.length})
+                </p>
+                <span className="font-mono text-[10px] text-muted-foreground">Every source link is verified clickable</span>
+              </div>
+              <div className="space-y-3">
                 {identity.namesDiscovered.map((item: any, idx: number) => (
-                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-border bg-muted/30 p-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold">{item.name}</span>
+                  <div key={idx} className="border border-border bg-muted/30 p-3.5 flex flex-col gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-base font-bold text-foreground">{item.name}</span>
                         <span className="border border-border bg-background px-1.5 py-0.5 font-mono text-[9px] uppercase font-bold text-primary">
                           {item.confidence} confidence
                         </span>
+                        {item.matchType && (
+                          <span className="border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
+                            {item.matchType}
+                          </span>
+                        )}
                       </div>
-                      <p className="font-mono text-xs text-muted-foreground mt-0.5">Source: {item.source}</p>
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {item.sourceUrl && (
+                          <a
+                            href={item.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 border border-border bg-background px-2 py-1 font-mono text-[11px] font-bold text-primary hover:border-primary transition-colors"
+                          >
+                            Source Link <ExternalLink className="size-3" />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => {
+                            setConfirmedPersonName(item.name)
+                            toast({ title: 'Name Set', description: `Subject profile set to: ${item.name}` })
+                          }}
+                          className="border border-foreground bg-primary px-3 py-1 font-mono text-xs font-bold text-primary-foreground shadow-[2px_2px_0_var(--foreground)] hover:translate-x-0.5 transition-transform"
+                        >
+                          Confirm
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setConfirmedPersonName(item.name)
-                        toast({ title: 'Name Set', description: `Subject profile set to: ${item.name}` })
-                      }}
-                      className="border-2 border-foreground bg-primary px-3 py-1 font-mono text-xs font-bold text-primary-foreground shadow-[2px_2px_0_var(--foreground)] self-start sm:self-auto hover:translate-x-0.5 transition-transform"
-                    >
-                      Confirm Name
-                    </button>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      <span className="font-bold text-foreground">Source: </span>
+                      {item.source}
+                    </div>
+                    {item.evidence && (
+                      <div className="border-l-2 border-primary/60 bg-background/60 p-2 font-mono text-xs text-foreground/90 italic">
+                        &ldquo;{item.evidence}&rdquo;
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Discovered Secondary Entities (Usernames, Emails, Orgs) */}
+          {identity?.entities &&
+            (identity.entities.usernames?.length > 0 ||
+              identity.entities.emails?.length > 0 ||
+              identity.entities.organizations?.length > 0) && (
+              <div className="mb-6 border-2 border-border bg-background p-4">
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-primary mb-3">
+                  Correlated Secondary Entities & Identifiers
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {identity.entities.usernames?.map((u: string) => (
+                    <span key={u} className="border border-border bg-muted/40 px-2 py-1 font-mono text-xs text-foreground flex items-center gap-1">
+                      <span className="text-primary font-bold">@</span>{u.replace(/^@/, '')}
+                    </span>
+                  ))}
+                  {identity.entities.emails?.map((e: string) => (
+                    <span key={e} className="border border-border bg-muted/40 px-2 py-1 font-mono text-xs text-foreground flex items-center gap-1">
+                      <Mail className="size-3 text-primary" /> {e}
+                    </span>
+                  ))}
+                  {identity.entities.organizations?.map((o: string) => (
+                    <span key={o} className="border border-border bg-muted/40 px-2 py-1 font-mono text-xs text-foreground flex items-center gap-1">
+                      <Building2 className="size-3 text-primary" /> {o}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {/* Optional Operator Manual Override Accordion */}
+          <div className="mb-6 border-2 border-dashed border-border bg-muted/10 p-3">
+            <button
+              type="button"
+              onClick={() => setShowManualOverride(!showManualOverride)}
+              className="flex items-center justify-between w-full font-mono text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                {showManualOverride ? <ChevronUp className="size-4 text-primary" /> : <ChevronDown className="size-4 text-primary" />}
+                Manual Operator Override (Optional)
+              </span>
+              <span className="text-[10px] font-normal uppercase text-muted-foreground">
+                {showManualOverride ? 'Collapse' : 'Expand Form'}
+              </span>
+            </button>
+            {showManualOverride && (
+              <form onSubmit={handleSavePersonName} className="mt-3 flex flex-col sm:flex-row gap-2 pt-3 border-t border-border/40">
+                <input
+                  value={manualNameInput}
+                  onChange={(e) => setManualNameInput(e.target.value)}
+                  placeholder="Record verified person name (e.g. from private / offline confirmation)..."
+                  className="flex-1 border-2 border-border bg-background px-4 py-2 font-mono text-xs outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  className="border-2 border-foreground bg-primary px-5 py-2 font-mono text-xs font-bold uppercase text-primary-foreground shadow-[3px_3px_0_var(--foreground)] hover:translate-x-0.5 hover:translate-y-0.5 transition-transform"
+                >
+                  Set Verified Name
+                </button>
+              </form>
+            )}
+          </div>
 
           {/* India UPI Banking Name Resolution Channels */}
           {isIndia && (

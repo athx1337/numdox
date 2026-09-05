@@ -39,9 +39,30 @@ class IdentityExtractor:
     def extract_names_from_web_findings(cls, findings: List[WebFinding]) -> List[NameEvidence]:
         evidences: List[NameEvidence] = []
         name_pattern = re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b')
+        explicit_contact_pattern = re.compile(r'(?:contact(?:\s+person)?|owner|posted\s+by|name|author|signatory|proprietor)\s*[:\-–]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})', re.IGNORECASE)
 
         for finding in findings:
             text = f"{finding.title} {finding.snippet}"
+
+            # 1. Check for explicit contact/owner labels
+            for m in explicit_contact_pattern.finditer(text):
+                candidate = m.group(1).strip()
+                words = candidate.lower().split()
+                if any(w in cls.IGNORE_TERMS for w in words):
+                    continue
+                if len(candidate) < 4 or len(candidate) > 30:
+                    continue
+
+                evidences.append(NameEvidence(
+                    name=candidate,
+                    source=finding.source_domain or "Public Web",
+                    confidence="high",
+                    evidence_type="public_web",
+                    snippet=finding.snippet[:120],
+                    url=finding.url
+                ))
+
+            # 2. General proper noun mentions in snippet
             matches = name_pattern.findall(text)
             for candidate in matches:
                 words = candidate.lower().split()
@@ -50,14 +71,16 @@ class IdentityExtractor:
                 if len(candidate) < 4 or len(candidate) > 30:
                     continue
 
-                evidences.append(NameEvidence(
-                    name=candidate.strip(),
-                    source=finding.source_domain or "Public Web",
-                    confidence="medium" if finding.category in ["social", "business"] else "low",
-                    evidence_type="public_web",
-                    snippet=finding.snippet[:120],
-                    url=finding.url
-                ))
+                # Avoid duplicate within the same finding
+                if not any(e.name.lower() == candidate.lower() for e in evidences):
+                    evidences.append(NameEvidence(
+                        name=candidate.strip(),
+                        source=finding.source_domain or "Public Web",
+                        confidence="medium" if finding.category in ["social", "business"] else "low",
+                        evidence_type="public_web",
+                        snippet=finding.snippet[:120],
+                        url=finding.url
+                    ))
         return evidences
 
     @classmethod

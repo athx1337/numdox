@@ -185,13 +185,31 @@ export class PhoneOrchestrator {
               break
             }
             case 'identity': {
-              const idProfile = await IdentityFinderService.resolveIdentity(request.phone)
+              const idProfile = await IdentityFinderService.resolveIdentity(request.phone, (collectorStatus) => {
+                const currentId = (results.identity as any) || {}
+                const existingStatuses = currentId.collectorStatuses || []
+                const filtered = existingStatuses.filter((s: any) => s.type !== collectorStatus.type)
+                results.identity = {
+                  ...currentId,
+                  collectorStatuses: [...filtered, collectorStatus],
+                }
+                this.jobResults.set(jobId, { ...results, status: 'processing' } as any)
+              })
+
               results.identity = {
                 primaryName: idProfile.primaryName,
                 aliases: idProfile.aliases,
                 namesDiscovered: idProfile.namesDiscovered,
-                confidence: idProfile.primaryName ? 'high' : 'low',
+                confidence: idProfile.confidence,
                 source: idProfile.sources.join(', '),
+                details: idProfile.details,
+                statusMessage: idProfile.statusMessage,
+                isResolved: idProfile.isResolved,
+                collectorStatuses: idProfile.collectorStatuses,
+                evidenceItems: idProfile.evidenceItems,
+                entities: idProfile.entities,
+                relationships: idProfile.relationships,
+                phoneVariants: idProfile.phoneVariants,
                 upiHandles: idProfile.upiHandles,
                 truecallerUrl: idProfile.truecallerSearchUrl,
               }
@@ -200,6 +218,8 @@ export class PhoneOrchestrator {
           }
 
           this.updateModuleStatus(jobId, moduleName, 'completed', startedAt)
+          // Update in-memory jobResults so polling client sees current progress and intermediate modules
+          this.jobResults.set(jobId, { ...results, status: 'processing' } as any)
         } catch (error) {
           console.error(`Module ${moduleName} failed for job ${jobId}:`, error)
           const message = error instanceof Error ? error.message : String(error)
