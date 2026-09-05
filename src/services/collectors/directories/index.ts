@@ -74,13 +74,30 @@ export class DirectoryCollector implements Collector {
 
         if (webRes.ok) {
           const html = await webRes.text()
+          if (/limit exceeded|too many requests/i.test(html)) {
+            quotaExceeded = true
+          }
+
+          // Method A: vCard download attribute (e.g. aniket-chandra.vcf)
+          const vcfMatch = html.match(/download="([^"]+)\.vcf"/i)
+          // Method B: Astro profile bold name div
+          const astroBoldMatch = html.match(/<div class="[^"]*font-bold[^"]*"[^>]*>\s*([^<]+?)\s*<\/div>/i)
+          // Method C: Title / OpenGraph metadata
           const titleMatch =
             html.match(/<title>([^<]+?)\s*-\s*Who called/i) ||
             html.match(/meta\s+property=["']og:title["']\s+content=["']([^"']+?)\s*-\s*Who called/i) ||
             html.match(/meta\s+name=["']title["']\s+content=["']([^"']+?)\s*-\s*Who called/i) ||
             html.match(/<h1[^>]*>([^<]+)<\/h1>/i)
 
-          let foundName = titleMatch ? titleMatch[1].trim() : null
+          let foundName: string | null = null
+          if (astroBoldMatch && astroBoldMatch[1].trim().length > 1 && !/limit exceeded|sign in/i.test(astroBoldMatch[1])) {
+            foundName = astroBoldMatch[1].trim()
+          } else if (vcfMatch && vcfMatch[1].trim().length > 1) {
+            foundName = vcfMatch[1].trim().replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+          } else if (titleMatch && titleMatch[1].trim().length > 1) {
+            foundName = titleMatch[1].trim()
+          }
+
           if (!foundName) {
             // Check JSON in script tags
             const scriptMatches = html.match(/"name":"([^"]+)"/g)
@@ -97,7 +114,8 @@ export class DirectoryCollector implements Collector {
             foundName &&
             foundName.length > 1 &&
             !foundName.toLowerCase().includes('reverse phone') &&
-            !foundName.toLowerCase().includes('free reverse')
+            !foundName.toLowerCase().includes('free reverse') &&
+            !foundName.toLowerCase().includes('search limit')
           ) {
             evidenceItems.push({
               id: `tc-web-${Date.now()}`,
