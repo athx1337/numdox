@@ -3,6 +3,30 @@ import { LocationLookup } from '@/services/location-lookup'
 import { ReputationChecker } from '@/services/reputation-checker'
 import { PhoneLookupRequestSchema, PhoneValidationSchema } from '@/types/phone'
 
+import { CarrierLookup } from '@/services/carrier-lookup'
+
+describe('CarrierLookup', () => {
+  it('accurately resolves mobile carrier for known test number', async () => {
+    const { carrier } = await CarrierLookup.lookup('+918453607248', 'IN')
+    expect(carrier.name).toBeDefined()
+    expect(carrier.name?.toLowerCase()).toContain('mts')
+    expect(carrier.confidence).toBe('high')
+    expect(carrier.ported).toBe(true)
+  })
+
+  it('accurately resolves Bharti Airtel series', async () => {
+    const { carrier } = await CarrierLookup.lookup('+919810012345', 'IN')
+    expect(carrier.name).toBeDefined()
+    expect(carrier.name?.toLowerCase()).toContain('airtel')
+  })
+
+  it('accurately resolves Reliance Jio series', async () => {
+    const { carrier } = await CarrierLookup.lookup('+917000012345', 'IN')
+    expect(carrier.name).toBeDefined()
+    expect(carrier.name?.toLowerCase()).toContain('jio')
+  })
+})
+
 describe('LocationLookup', () => {
   it('extracts location metadata from phone number', async () => {
     const { location } = await LocationLookup.lookup('+14155552671', 'US')

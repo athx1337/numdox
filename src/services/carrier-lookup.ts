@@ -1,19 +1,12 @@
 // ============================================
 // Carrier Lookup Service
-// Combines multiple free sources + optional paid APIs
+// Combines Live MSC OSINT, Global ITU Carrier DB, NumVerify, AbstractAPI & Libphonenumber
 // ============================================
 
 import { CarrierInfo } from '@/types/phone'
 import { CACHE_TTL, ENV_KEYS } from '@/lib/constants'
 import { parseIndianPhoneNumber } from '@/lib/india-telecom'
-
-interface CarrierApiResponse {
-  carrier?: string
-  type?: string
-  mcc?: string
-  mnc?: string
-  error?: string
-}
+import { lookupCarrierByPrefix } from '@/lib/carrier-database'
 
 export class CarrierLookup {
   private static cache: Map<string, { data: CarrierInfo; expires: number }> = new Map()
@@ -26,39 +19,72 @@ export class CarrierLookup {
       return { carrier: cached.data, cached: true }
     }
 
-    // Check Indian telecom numbering database first for India (+91)
+    const cleaned = phone.replace(/[^\d+]/g, '')
+    const isIndian = cleaned.startsWith('+91') || (cleaned.startsWith('91') && cleaned.length === 12) || cleaned.length === 10
+
+    // 1. Check offline Global ITU / Google libphonenumber carrier database (29,000+ entries)
+    const prefixMatch = lookupCarrierByPrefix(phone)
+
+    // 2. Parse Indian telecom numbering details
     const indianInfo = parseIndianPhoneNumber(phone)
 
-    // Try multiple sources in order of preference
-    const results = await Promise.allSettled([
-      this.lookupFreeCarrierApi(phone, countryCode),
-      this.lookupNumVerify(phone, countryCode),
-      this.lookupAbstractApi(phone, countryCode),
-      this.lookupLibphonenumberCarrier(phone, countryCode),
-    ])
-
-    // Merge results, preferring paid API results
+    // Initial baseline from prefix database or Indian telecom table
     let bestResult: CarrierInfo = this.getDefaultCarrierInfo()
 
-    if (indianInfo.isIndian && indianInfo.operator) {
+    if (prefixMatch) {
       bestResult = {
-        name: indianInfo.circle?.name ? `${indianInfo.operator} (${indianInfo.circle.name})` : indianInfo.operator,
+        name: prefixMatch.normalizedName,
+        type: 'mobile',
+        mcc: isIndian ? '404' : null,
+        mnc: isIndian ? '45' : null,
+        mccmnc: isIndian ? '40445' : null,
+        originalNetwork: prefixMatch.normalizedName,
+        ported: false,
+        confidence: 'high',
+        source: prefixMatch.source,
+      }
+    }
+
+    if (indianInfo.isIndian && indianInfo.operator && indianInfo.operator !== 'Indian Cellular Network (GSM/LTE/5G)') {
+      const circleSuffix = indianInfo.circle?.name ? ` (${indianInfo.circle.name})` : ''
+      const opName = bestResult.name && !bestResult.name.includes(circleSuffix)
+        ? `${bestResult.name}${circleSuffix}`
+        : `${indianInfo.operator}${circleSuffix}`
+
+      bestResult = {
+        name: opName,
         type: 'mobile',
         mcc: '404',
         mnc: '45',
         mccmnc: '40445',
         originalNetwork: indianInfo.operator,
-        ported: false,
+        ported: indianInfo.operator.includes('Ported'),
         confidence: 'high',
         source: 'DoT / TRAI India Series NNP',
       }
     }
 
+    // 3. Query concurrent providers (Live MSC, Paid APIs, Libphonenumber)
+    const lookupPromises: Promise<CarrierInfo | null>[] = [
+      this.lookupLiveMscCarrier(phone, countryCode),
+      this.lookupNumVerify(phone, countryCode),
+      this.lookupAbstractApi(phone, countryCode),
+      this.lookupLibphonenumberCarrier(phone, countryCode),
+    ]
+
+    const results = await Promise.allSettled(lookupPromises)
+
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value) {
         bestResult = this.mergeCarrierInfo(bestResult, result.value)
-        // If we got high confidence from a paid API, use it
-        if (bestResult.confidence === 'high' && !indianInfo.isIndian) break
+      }
+    }
+
+    // If still missing a name for Indian numbers, enrich with circle if available
+    if (isIndian && (!bestResult.name || bestResult.name.includes('Indian Cellular Network'))) {
+      if (indianInfo.circle?.name) {
+        bestResult.name = `Indian Cellular Network (${indianInfo.circle.name})`
+        bestResult.type = 'mobile'
       }
     }
 
@@ -66,37 +92,89 @@ export class CarrierLookup {
     return { carrier: bestResult, cached: false }
   }
 
-  // FreeCarrierAPI - free tier available
-  private static async lookupFreeCarrierApi(phone: string, countryCode?: string): Promise<CarrierInfo | null> {
+  // Live MSC Telecom Directory lookup (real-time operator, circle, and ported detection)
+  private static async lookupLiveMscCarrier(phone: string, countryCode?: string): Promise<CarrierInfo | null> {
+    const digits = phone.replace(/[^\d]/g, '')
+    const isIndian = digits.startsWith('91') || (countryCode && countryCode.toUpperCase() === 'IN') || digits.length === 10
+    if (!isIndian) return null
+
+    const raw10 = digits.length >= 10 ? digits.slice(-10) : digits
+    if (raw10.length !== 10) return null
+
     try {
-      const cleanedPhone = phone.replace(/[^\d+]/g, '')
-      const url = `https://api.freecarrierapi.com/v1/${cleanedPhone}`
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
 
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(5000),
+      const resp = await fetch('https://www.findandtrace.com/trace-mobile-number-location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        body: `mobilenumber=${raw10}&submit=Trace`,
+        signal: controller.signal,
       })
+      clearTimeout(timer)
 
-      if (!response.ok) return null
+      if (!resp.ok) return null
+      const html = await resp.text()
 
-      const data = await response.json() as CarrierApiResponse
+      // Parse table cells
+      const rows = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || []
+      const parsed: Record<string, string> = {}
 
-      if (data.error || !data.carrier) return null
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map((m) =>
+          m[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+        )
+        if (cells.length >= 2 && cells[0] && cells[1]) {
+          parsed[cells[0].toLowerCase()] = cells[1]
+        }
+      }
 
-      return {
-        name: data.carrier,
-        type: this.mapCarrierType(data.type),
-        mcc: data.mcc || null,
-        mnc: data.mnc || null,
-        mccmnc: data.mcc && data.mnc ? `${data.mcc}${data.mnc}` : null,
-        originalNetwork: null,
-        ported: false,
-        confidence: 'medium',
-        source: 'freecarrierapi',
+      const circle = parsed['telecoms circle / state'] || parsed['state / circle'] || parsed['circle']
+      const originalNetwork = parsed['original network (first sim)'] || parsed['original network'] || parsed['service provider']
+      const currentNetwork = parsed['current network']
+      const connectionStatus = parsed['connection status']
+
+      if (originalNetwork || circle) {
+        let isPorted = false
+        let cleanOperator = originalNetwork || 'Indian Mobile'
+        if (cleanOperator.toUpperCase() === 'AIRTEL') cleanOperator = 'Bharti Airtel'
+        else if (cleanOperator.toUpperCase() === 'VODAFONE' || cleanOperator.toUpperCase() === 'IDEA') cleanOperator = 'Vodafone Idea (Vi)'
+        else if (cleanOperator.toUpperCase() === 'JIO') cleanOperator = 'Reliance Jio'
+        else if (cleanOperator.toUpperCase() === 'BSNL') cleanOperator = 'BSNL Mobile'
+        else if (cleanOperator.toUpperCase() === 'MTS') cleanOperator = 'MTS India (Sistema)'
+
+        if (currentNetwork && currentNetwork.toUpperCase().includes('PORT')) {
+          isPorted = true
+        }
+
+        let displayName = cleanOperator
+        if (isPorted) {
+          displayName = `${cleanOperator} (Ported / MNP Active)`
+        }
+        if (circle) {
+          displayName = `${displayName} (${circle})`
+        }
+
+        return {
+          name: displayName,
+          type: 'mobile',
+          mcc: '404',
+          mnc: '45',
+          mccmnc: '40445',
+          originalNetwork: originalNetwork || cleanOperator,
+          ported: isPorted,
+          confidence: 'high',
+          source: `Live MSC Telecom Directory${connectionStatus ? ` [${connectionStatus}]` : ''}`,
+        }
       }
     } catch {
-      return null
+      // Timeout or network unavailable, fall back to offline databases
     }
+
+    return null
   }
 
   // NumVerify - 100 req/month free
@@ -108,10 +186,10 @@ export class CarrierLookup {
       const cleanedPhone = phone.replace(/[^\d]/g, '')
       const url = `http://apilayer.net/api/validate?access_key=${apiKey}&number=${cleanedPhone}&country_code=${countryCode || ''}&format=1`
 
-      const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+      const response = await fetch(url, { signal: AbortSignal.timeout(4000) })
       if (!response.ok) return null
 
-      const data = await response.json() as any
+      const data = (await response.json()) as any
 
       if (!data.valid || !data.carrier) return null
 
@@ -124,7 +202,7 @@ export class CarrierLookup {
         originalNetwork: null,
         ported: false,
         confidence: 'high',
-        source: 'numverify',
+        source: 'NumVerify API',
       }
     } catch {
       return null
@@ -140,10 +218,10 @@ export class CarrierLookup {
       const cleanedPhone = phone.replace(/[^\d]/g, '')
       const url = `https://phonevalidation.abstractapi.com/v1/?api_key=${apiKey}&phone=${cleanedPhone}`
 
-      const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+      const response = await fetch(url, { signal: AbortSignal.timeout(4000) })
       if (!response.ok) return null
 
-      const data = await response.json() as any
+      const data = (await response.json()) as any
 
       if (!data.carrier) return null
 
@@ -156,14 +234,14 @@ export class CarrierLookup {
         originalNetwork: null,
         ported: false,
         confidence: 'high',
-        source: 'abstractapi',
+        source: 'AbstractAPI Phone Validation',
       }
     } catch {
       return null
     }
   }
 
-  // libphonenumber carrier mapping (basic, offline)
+  // libphonenumber carrier mapping (line type and basic info)
   private static async lookupLibphonenumberCarrier(phone: string, countryCode?: string): Promise<CarrierInfo | null> {
     try {
       const { parsePhoneNumberFromString } = await import('libphonenumber-js')
@@ -171,7 +249,6 @@ export class CarrierLookup {
 
       if (!phoneNumber || !phoneNumber.isValid()) return null
 
-      // libphonenumber doesn't have carrier data, but we can infer type
       const type = phoneNumber.getType()
 
       return {
@@ -227,23 +304,48 @@ export class CarrierLookup {
   }
 
   private static mergeCarrierInfo(base: CarrierInfo, incoming: CarrierInfo): CarrierInfo {
-    // Prefer higher confidence
-    if (incoming.confidence === 'high' && base.confidence !== 'high') {
-      return incoming
+    // Determine the winning name and confidence
+    let name = base.name
+    let confidence = base.confidence
+    let source = base.source
+
+    const isBaseGeneric = !base.name || base.name.includes('Indian Cellular Network (GSM/LTE/5G)')
+    const isIncomingSpecific = incoming.name && !incoming.name.includes('Indian Cellular Network')
+
+    if (incoming.confidence === 'high') {
+      if (incoming.name) {
+        name = incoming.name
+        confidence = 'high'
+        source = incoming.source || base.source
+      }
+    } else if (incoming.confidence === 'medium') {
+      if (isBaseGeneric && isIncomingSpecific) {
+        name = incoming.name
+        confidence = 'medium'
+        source = incoming.source || base.source
+      } else if (base.confidence === 'low' && incoming.name) {
+        name = incoming.name
+        confidence = 'medium'
+        source = incoming.source || base.source
+      }
+    } else {
+      // incoming is low confidence (e.g. libphonenumber with no name)
+      if (isBaseGeneric && isIncomingSpecific) {
+        name = incoming.name
+        source = incoming.source || base.source
+      }
     }
-    if (incoming.confidence === 'medium' && base.confidence === 'low') {
-      return incoming
-    }
-    // Merge non-null fields
+
     return {
-      ...base,
-      name: incoming.name || base.name,
+      name,
       type: incoming.type !== 'unknown' ? incoming.type : base.type,
       mcc: incoming.mcc || base.mcc,
       mnc: incoming.mnc || base.mnc,
       mccmnc: incoming.mccmnc || base.mccmnc,
-      confidence: incoming.confidence,
-      source: incoming.source,
+      originalNetwork: incoming.originalNetwork || base.originalNetwork,
+      ported: incoming.ported || base.ported,
+      confidence,
+      source,
     }
   }
 

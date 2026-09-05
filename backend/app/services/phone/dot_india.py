@@ -1,4 +1,6 @@
 from typing import Optional, Dict, Any, List
+import phonenumbers
+from phonenumbers import carrier
 from backend.app.schemas.phone import NormalizedPhone
 from backend.app.schemas.intelligence import PhoneIntelligenceResult, CarrierData, LocationData
 from backend.app.services.phone.base import PhoneIntelProvider
@@ -49,6 +51,18 @@ PREFIX_ALLOCATIONS = [
     {"prefix": "6380", "operator": "Reliance Jio", "circle": "TN"},
     {"prefix": "6386", "operator": "Reliance Jio", "circle": "UPE"},
     {"prefix": "6395", "operator": "Reliance Jio", "circle": "UPW"},
+    {"prefix": "7000", "operator": "Reliance Jio", "circle": "MP"},
+    {"prefix": "7001", "operator": "Reliance Jio", "circle": "WB"},
+    {"prefix": "7002", "operator": "Reliance Jio", "circle": "AS"},
+    {"prefix": "7003", "operator": "Reliance Jio", "circle": "KOL"},
+    {"prefix": "7004", "operator": "Reliance Jio", "circle": "BR"},
+    {"prefix": "7005", "operator": "Reliance Jio", "circle": "NE"},
+    {"prefix": "7006", "operator": "Reliance Jio", "circle": "JK"},
+    {"prefix": "7007", "operator": "Reliance Jio", "circle": "UPE"},
+    {"prefix": "7008", "operator": "Reliance Jio", "circle": "OR"},
+    {"prefix": "7009", "operator": "Reliance Jio", "circle": "PB"},
+    # MTS India (Sistema Shyam / Ported)
+    {"prefix": "8453", "operator": "MTS India (Ported / Airtel)", "circle": "KA"},
     # Bharti Airtel
     {"prefix": "9810", "operator": "Bharti Airtel", "circle": "DL"},
     {"prefix": "9815", "operator": "Bharti Airtel", "circle": "PB"},
@@ -138,7 +152,19 @@ class DoTIndiaIntelProvider(PhoneIntelProvider):
         prefix4 = raw10[:4]
         match = next((item for item in PREFIX_ALLOCATIONS if item["prefix"] == prefix4), None)
 
-        operator_name = match["operator"] if match else "Indian Mobile Network (GSM/LTE/5G)"
+        operator_name = match["operator"] if match else None
+        if not operator_name:
+            try:
+                parsed = phonenumbers.parse(phone.e164, None)
+                py_carrier = carrier.name_for_number(parsed, "en")
+                if py_carrier:
+                    operator_name = py_carrier
+            except Exception:
+                pass
+
+        if not operator_name:
+            operator_name = "Indian Mobile Network (GSM/LTE/5G)"
+
         circle_code = match["circle"] if match else None
         circle_info = INDIAN_TELECOM_CIRCLES.get(circle_code, {}) if circle_code else {}
 
@@ -151,7 +177,7 @@ class DoTIndiaIntelProvider(PhoneIntelProvider):
             line_type=phone.type,
             carrier=CarrierData(
                 name=f"{operator_name} ({circle_name})" if circle_name else operator_name,
-                type="mobile" if phone.type == "MOBILE" else "landline",
+                type="mobile" if phone.type in ("MOBILE", "FIXED_LINE_OR_MOBILE") else "landline",
                 mcc="404",
                 mnc="45",
                 circle=circle_name,

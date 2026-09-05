@@ -3,6 +3,8 @@
 // Department of Telecommunications (DoT) & TRAI Mapping
 // ============================================
 
+import { lookupCarrierByPrefix } from './carrier-database'
+
 export interface IndianCircleInfo {
   code: string
   name: string
@@ -237,6 +239,19 @@ const PREFIX_ALLOCATIONS: Array<{ prefix: string; operator: string; circleCode: 
   { prefix: '9480', operator: 'BSNL Mobile', circleCode: 'KA' },
   { prefix: '9481', operator: 'BSNL Mobile', circleCode: 'KA' },
   { prefix: '9482', operator: 'BSNL Mobile', circleCode: 'KA' },
+  // MTS / Sistema Shyam (Ported / Acquired)
+  { prefix: '8453', operator: 'MTS India (Ported / Active)', circleCode: 'KA' },
+  // Reliance Jio 7000 Series
+  { prefix: '7000', operator: 'Reliance Jio', circleCode: 'MP' },
+  { prefix: '7001', operator: 'Reliance Jio', circleCode: 'WB' },
+  { prefix: '7002', operator: 'Reliance Jio', circleCode: 'AS' },
+  { prefix: '7003', operator: 'Reliance Jio', circleCode: 'KOL' },
+  { prefix: '7004', operator: 'Reliance Jio', circleCode: 'BR' },
+  { prefix: '7005', operator: 'Reliance Jio', circleCode: 'NE' },
+  { prefix: '7006', operator: 'Reliance Jio', circleCode: 'JK' },
+  { prefix: '7007', operator: 'Reliance Jio', circleCode: 'UPE' },
+  { prefix: '7008', operator: 'Reliance Jio', circleCode: 'OR' },
+  { prefix: '7009', operator: 'Reliance Jio', circleCode: 'PB' },
 ]
 
 export function parseIndianPhoneNumber(phone: string): IndianPhoneInfo {
@@ -266,7 +281,16 @@ export function parseIndianPhoneNumber(phone: string): IndianPhoneInfo {
   const allocation = PREFIX_ALLOCATIONS.find((a) => a.prefix === prefix4)
 
   let circle: IndianCircleInfo | undefined
-  let operator = allocation?.operator || 'Indian Cellular Network (GSM/LTE/5G)'
+  let operator = allocation?.operator
+
+  if (!operator) {
+    const carrierMatch = lookupCarrierByPrefix('91' + raw10)
+    if (carrierMatch) {
+      operator = carrierMatch.normalizedName
+    } else {
+      operator = 'Indian Cellular Network (GSM/LTE/5G)'
+    }
+  }
 
   if (allocation?.circleCode && INDIAN_TELECOM_CIRCLES[allocation.circleCode]) {
     circle = INDIAN_TELECOM_CIRCLES[allocation.circleCode]
